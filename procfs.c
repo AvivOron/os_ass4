@@ -33,9 +33,6 @@ procfsiunlock(struct inode *ip)
 
 void 
 procfsiread(struct inode* dp, struct inode *ip) {
-  struct buf *bp;
-
-
   if(ip == 0 || ip->ref < 1)
     panic("procfsiread");
 
@@ -46,14 +43,9 @@ procfsiread(struct inode* dp, struct inode *ip) {
   release(&icache.lock);
 
   if(!(ip->flags & I_VALID)){
-    ip->dev = dp->dev;
-    ip->major = dp->major;
-    //ip->minor = dp->minor;
-    //ip->nlink = dp->nlink;
-    //ip->size = dp->size;
 
     ip->flags |= I_VALID;
-    procfsiunlock(ip);
+    //procfsiunlock(ip);
     if(ip->type == 0)
       panic("procfsiread: no type");
   }
@@ -63,7 +55,17 @@ procfsiread(struct inode* dp, struct inode *ip) {
 
 int
 procfsread(struct inode *ip, char *dst, int off, int n) {
-  return 0;
+  int r;
+
+  if(ip->type != T_FILE)
+    return -1;
+  
+	procfsiread(ip);
+	//if((r = readi(ip, dst, off, n)) > 0)
+	//  f->off += r;
+
+	procfsiunlock(ip);
+	return r;
 }
 
 int
