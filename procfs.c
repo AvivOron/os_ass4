@@ -83,6 +83,7 @@ procfsiread(struct inode* dp, struct inode *ip) {
 // chdir > namei > namex > dirlookup > readi > device "read"
 int
 procfsread(struct inode *ip, char *dst, int off, int n) {
+	cprintf("i'm in procfsread\n");
 	// dirent array for virtual folders
 	struct dirent dirent_entries[NPROC+2]; //ref: entries
 
