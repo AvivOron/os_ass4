@@ -387,6 +387,8 @@ sys_chdir(void)
   if(ip->type != T_DIR && !IS_DEV_DIR(ip)) {
     iunlockput(ip);
     end_op();
+      cprintf("1\n");
+
     return -1;
   }
   iunlock(ip);

@@ -25,22 +25,23 @@ procfsiunlock(struct inode *ip)
   if(ip == 0 || !(ip->flags & I_BUSY) || ip->ref < 1)
     panic("procfsiunlock");
 
-  acquire(&icache.lock);
+  /*acquire(&icache.lock);
   ip->flags &= ~I_BUSY;
   wakeup(ip);
-  release(&icache.lock);
+  release(&icache.lock);*/
 }
 
+//iread
 void 
 procfsiread(struct inode* dp, struct inode *ip) {
   if(ip == 0 || ip->ref < 1)
     panic("procfsiread");
 
-  acquire(&icache.lock);
+  /*acquire(&icache.lock);
   while(ip->flags & I_BUSY)
     sleep(ip, &icache.lock);
   ip->flags |= I_BUSY;
-  release(&icache.lock);
+  release(&icache.lock);*/
 
   if(!(ip->flags & I_VALID)){
 
@@ -52,20 +53,14 @@ procfsiread(struct inode* dp, struct inode *ip) {
 }
 
 
-
+// chdir > namei > namex > dirlookup > readi > device "read"
 int
 procfsread(struct inode *ip, char *dst, int off, int n) {
-  int r;
+  //should return n (or less) bytes starting at offset 'off' and assign the data into dst buffer
+	//where we read the data from?
+	    cprintf("procfsread ---> start\n");
 
-  if(ip->type != T_FILE)
-    return -1;
-  
-	procfsiread(ip);
-	//if((r = readi(ip, dst, off, n)) > 0)
-	//  f->off += r;
-
-	procfsiunlock(ip);
-	return r;
+	return 0;
 }
 
 int

@@ -442,7 +442,7 @@ readi(struct inode *ip, char *dst, uint off, uint n)
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].read)
       return -1;
-    return devsw[ip->major].read(ip, dst, off, n);
+    return devsw[ip->major].read(ip, dst, off, n); //calls our read
   }
 
   if(off > ip->size || off + n < off)
@@ -515,7 +515,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
     panic("dirlookup not DIR");
 
   for(off = 0; off < dp->size || dp->type == T_DEV; off += sizeof(de)){
-    if(readi(dp, (char*)&de, off, sizeof(de)) != sizeof(de)) {
+    if(readi(dp, (char*)&de, off, sizeof(de)) != sizeof(de)) { // de = directory entry
       if (dp->type == T_DEV)
         return 0;
       else
@@ -617,7 +617,6 @@ static struct inode*
 namex(char *path, int nameiparent, char *name)
 {
   struct inode *ip, *next;
-
   if(*path == '/')
     ip = iget(ROOTDEV, ROOTINO);
   else
@@ -635,6 +634,7 @@ namex(char *path, int nameiparent, char *name)
       return ip;
     }
     if((next = dirlookup(ip, name, 0)) == 0){
+
       iunlockput(ip);
       return 0;
     }
