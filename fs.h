@@ -53,3 +53,7 @@ struct dirent {
   char name[DIRSIZ];
 };
 
+extern int getFreeInodes();
+extern int getValidInodes();
+extern int getTotalRefs();
+extern int getUsedInodes();

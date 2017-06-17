@@ -11,6 +11,8 @@
 #include "proc.h"
 #include "x86.h"
 #include "procfs.h"
+#include "bio.h"
+
 
 // if the file is not a directory return 0, else return num != 0
 int 
@@ -49,6 +51,7 @@ procfsiread(struct inode* dp, struct inode *ip) {
 	    ip->size = dp->size;
   }// intiate file
   else if ( //free (ip->inum >= 3000 && ip->inum < 4000)
+          (ip->inum >= 3000 && ip->inum <= 3001) || // proc files
           (ip->inum >= 6000 && ip->inum <= 7000) || // status
           (ip->inum >= 10000 && ip->inum <= 16000)){ // file descriptors
     ip->minor = FILE;
@@ -79,13 +82,13 @@ procfsiread(struct inode* dp, struct inode *ip) {
 int
 procfsread(struct inode *ip, char *dst, int off, int n) {
 	// dirent array for virtual folders
-	struct dirent dirent_entries[NPROC+2]; //ref: entries
+	struct dirent dirent_entries[NPROC+4]; //ref: entries
 
 	// create dir array
 	struct proc p;
 	char output[1024]; //ref: out
 
-	int entry_count = 2; //ref: ent_count
+	int entry_count = 4; //ref: ent_count
 	int bytes_written = 0; //ref: written_bytes
 	int bytes_remaining = 0; //ref: remaining
 	int temp_n = n; //ref: actual_n
@@ -103,6 +106,14 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 		strcpy(dirent_entries[1].name,".."); 
 		dirent_entries[1].inum = 1; 
 		memmove(output+sizeof(struct dirent), &dirent_entries[1], sizeof(struct dirent));
+
+    strcpy(dirent_entries[2].name,"blockstat"); 
+    dirent_entries[2].inum = 3000; 
+    memmove(output+(2 * sizeof(struct dirent)), &dirent_entries[2], sizeof(struct dirent));
+
+    strcpy(dirent_entries[3].name,"inodestat"); 
+    dirent_entries[3].inum = 3001; 
+    memmove(output+(3 * sizeof(struct dirent)), &dirent_entries[3], sizeof(struct dirent));
 
 		//for each process running, create a directory (this is done in runtime)
 		for(i = 0; i < NPROC; i++){
@@ -130,8 +141,86 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 	}
 	//initiate processes
 	else if ((ip->type == T_DEV) && (ip->major == PROCFS)){
-		//PID
-	    if (ip->inum >= 1000 && ip->inum < 2000){
+
+    //proc root files
+    if(ip->inum == 3000){ //blockstat
+      char blockstat_buff[256];
+      strcpy(blockstat_buff, "");
+      strcpy(blockstat_buff,"Free blocks: ");
+      char numOfFreeBlocksStr[10] = "";
+      itoa(getFreeBlocks(), numOfFreeBlocksStr);
+      strcpy(blockstat_buff+strlen(blockstat_buff),numOfFreeBlocksStr);
+      strcpy(blockstat_buff+strlen(blockstat_buff),"\n");
+
+      strcpy(blockstat_buff+strlen(blockstat_buff),"Total blocks: ");
+      char numOfTotalBlocksStr[10] = "";
+      itoa(getTotalBlocks(), numOfTotalBlocksStr);
+      strcpy(blockstat_buff+strlen(blockstat_buff),numOfTotalBlocksStr);
+      strcpy(blockstat_buff+strlen(blockstat_buff),"\n");
+
+      strcpy(blockstat_buff+strlen(blockstat_buff),"Hit ratio: ");
+      char hitRatio[10] = "";
+      itoa(getNumOfBlockHits(), hitRatio);
+      strcpy(blockstat_buff+strlen(blockstat_buff),hitRatio);
+      strcpy(blockstat_buff+strlen(blockstat_buff),"\\");
+      itoa(getNumOfBlockAccess(), hitRatio);
+      strcpy(blockstat_buff+strlen(blockstat_buff),hitRatio);
+
+      strcpy(blockstat_buff+strlen(blockstat_buff),"\n");
+
+        // Write to dst
+      if (off < strlen(blockstat_buff)){
+        bytes_remaining = strlen(blockstat_buff) - off;
+        //cprintf("*actual_n==%d\n", actual_n);
+
+        if (bytes_remaining < temp_n){
+          temp_n = bytes_remaining;
+        }
+        // Write to output buffer
+        memmove(dst, blockstat_buff + off, temp_n);
+
+        return temp_n;
+      }
+    }
+    else if(ip->inum == 3001){
+      char inodestat_buff[256];
+      strcpy(inodestat_buff, "");
+      strcpy(inodestat_buff,"Free inodes: ");
+      char buf[10] = "";
+      itoa(getFreeInodes(), buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),"\n");
+
+      strcpy(inodestat_buff+strlen(inodestat_buff),"Valid inodes: ");
+      itoa(getValidInodes(), buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),"\n");
+
+      strcpy(inodestat_buff+strlen(inodestat_buff),"Refs per inode: ");
+      itoa(getTotalRefs(), buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),"\\");
+      itoa(getUsedInodes(), buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),buf);
+      strcpy(inodestat_buff+strlen(inodestat_buff),"\n");
+
+
+      // Write to dst
+      if (off < strlen(inodestat_buff)){
+        bytes_remaining = strlen(inodestat_buff) - off;
+        //cprintf("*actual_n==%d\n", actual_n);
+
+        if (bytes_remaining < temp_n){
+          temp_n = bytes_remaining;
+        }
+        // Write to output buffer
+        memmove(dst, inodestat_buff + off, temp_n);
+
+        return temp_n;
+      }
+
+    }
+    else if (ip->inum >= 1000 && ip->inum < 2000){ //PID
 	      strcpy(dirent_entries[0].name, "."); 
 	      dirent_entries[0].inum = ip->inum; 
 	      memmove(output, &dirent_entries[0], sizeof(struct dirent));
@@ -157,28 +246,28 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 	      	return 0;
 
 	      //FOUND PROCESS
-	      strcpy(dirent_entries[3].name,"cwd");
+	      strcpy(dirent_entries[2].name,"cwd");
 
 	      if (cwd)
-	        dirent_entries[3].inum = cwd->inum;
+	        dirent_entries[2].inum = cwd->inum;
 	      else 
-	        dirent_entries[3].inum = 3000 + ip->inum;
+	        dirent_entries[2].inum = 3000 + ip->inum;
 	      
-	      memmove(output+(3 * sizeof(struct dirent)), &dirent_entries[3], sizeof(struct dirent));
+	      memmove(output+(2 * sizeof(struct dirent)), &dirent_entries[2], sizeof(struct dirent));
 
 	      //FDINFO
-	      strcpy(dirent_entries[5].name,"fdinfo");
-	      dirent_entries[5].inum = 4000 + ip->inum;
-	      memmove(output+(5 * sizeof(struct dirent)), &dirent_entries[5], sizeof(struct dirent));
+	      strcpy(dirent_entries[3].name,"fdinfo");
+	      dirent_entries[3].inum = 4000 + ip->inum;
+	      memmove(output+(3 * sizeof(struct dirent)), &dirent_entries[3], sizeof(struct dirent));
 
 	      //STATUS
-	      strcpy(dirent_entries[6].name,"status");
-	      dirent_entries[6].inum = 5000 + ip->inum;
-	      memmove(output+(6 * sizeof(struct dirent)), &dirent_entries[6], sizeof(struct dirent));
+	      strcpy(dirent_entries[4].name,"status");
+	      dirent_entries[4].inum = 5000 + ip->inum;
+	      memmove(output+(4 * sizeof(struct dirent)), &dirent_entries[4], sizeof(struct dirent));
 
 	      //write content to dst
-	      if (off < ((7) * sizeof(struct dirent))){
-	        bytes_remaining = (7 * sizeof(struct dirent)) - off;
+	      if (off < ((5) * sizeof(struct dirent))){
+	        bytes_remaining = (5 * sizeof(struct dirent)) - off;
 	        //cprintf("*actual_n==%d\n", actual_n);
 
 	        if (bytes_remaining < n){

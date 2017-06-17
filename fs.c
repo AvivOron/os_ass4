@@ -660,3 +660,71 @@ nameiparent(char *path, char *name)
 {
   return namex(path, 1, name);
 }
+
+
+
+
+int
+getFreeInodes() {
+  struct inode *ip;
+  int numOfFreeInodes = 0;
+  acquire(&icache.lock);
+
+  for(ip = &icache.inode[0]; ip < &icache.inode[NINODE]; ip++){
+    if(ip->ref == 0){
+      numOfFreeInodes++;
+      }
+    }
+
+  release(&icache.lock);
+
+  return numOfFreeInodes;
+}
+
+int
+getValidInodes() {
+  struct inode *ip;
+  int numOfValidInodes = 0;
+  acquire(&icache.lock);
+
+  for(ip = &icache.inode[0]; ip < &icache.inode[NINODE]; ip++){
+    if(ip->flags & I_VALID){
+      numOfValidInodes++;
+      }
+    }
+
+  release(&icache.lock);
+
+  return numOfValidInodes;
+}
+
+int getTotalRefs(){
+  struct inode *ip;
+  int numOfRefs = 0;
+  acquire(&icache.lock);
+
+  for(ip = &icache.inode[0]; ip < &icache.inode[NINODE]; ip++){
+      numOfRefs += ip->ref;
+  }
+
+  release(&icache.lock);
+
+  return numOfRefs;
+}
+
+int getUsedInodes(){
+  struct inode *ip;
+  int numOfUsedInodes = 0;
+  acquire(&icache.lock);
+
+  for(ip = &icache.inode[0]; ip < &icache.inode[NINODE]; ip++){
+    if(ip->ref > 0){
+      numOfUsedInodes++;
+    }
+  }
+
+  release(&icache.lock);
+
+  return numOfUsedInodes;
+}
+

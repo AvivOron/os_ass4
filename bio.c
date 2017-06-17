@@ -25,6 +25,11 @@
 #include "param.h"
 #include "spinlock.h"
 #include "buf.h"
+#include "bio.h"
+
+int numOfBlockHits = 0;
+int numOfBlockAccess = 0;
+
 
 struct {
   struct spinlock lock;
@@ -53,6 +58,36 @@ binit(void)
     bcache.head.next->prev = b;
     bcache.head.next = b;
   }
+}
+
+int
+getFreeBlocks(){
+  struct buf *b;
+  int freeBlocks = NBUF;
+
+  acquire(&bcache.lock);
+
+  for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
+    if((b->flags & B_BUSY) || (b->flags & B_DIRTY)){
+      freeBlocks--;
+    }
+  }
+
+  release(&bcache.lock);
+  return freeBlocks;
+
+}
+
+int getTotalBlocks(){
+  return NBUF;
+}
+
+int getNumOfBlockHits(){
+  return numOfBlockHits;
+}
+
+int getNumOfBlockAccess(){
+  return numOfBlockAccess;
 }
 
 // Look through buffer cache for sector on device dev.
@@ -99,10 +134,14 @@ struct buf*
 bread(uint dev, uint sector)
 {
   struct buf *b;
-
+  numOfBlockAccess++;
   b = bget(dev, sector);
   if(!(b->flags & B_VALID))
     iderw(b);
+  else if(b->flags & B_VALID){
+    numOfBlockHits++;
+  }
+
   return b;
 }
 
