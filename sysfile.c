@@ -14,6 +14,15 @@
 #include "file.h"
 #include "fcntl.h"
 
+
+int
+strcmp(const char *p, const char *q)
+{
+  while(*p && *p == *q)
+    p++, q++;
+  return (uchar)*p - (uchar)*q;
+}
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -367,6 +376,7 @@ sys_mknod(void)
     end_op();
     return -1;
   }
+
   iunlockput(ip);
   end_op();
   return 0;

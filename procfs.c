@@ -6,28 +6,26 @@
 #include "spinlock.h"
 #include "fs.h"
 #include "file.h"
-#include "memlayout.h"
+#include "memlayout.h"	
 #include "mmu.h"
 #include "proc.h"
 #include "x86.h"
 #include "procfs.h"
 
-
-
-
 // if the file is not a directory return 0, else return num != 0
 int 
 procfsisdir(struct inode *ip) {
-	//make sure is a durectory and is under procfs
-	if(ip->type == T_DIR  && ip->major==PROCFS){
+	//make sure is a directory and is under procfs
+	if(ip->type == T_DEV  && ip->major==PROCFS){
 		//check that inum (inode number) is equal to a number in the /proc directory
 		if (ip->inum == namei("/proc")->inum)
         	return 1;
       	else
         	return ip->minor == DIRECTORY;
 	}
-     return ip->minor == DIRECTORY;
+    return ip->minor == DIRECTORY;
 }
+
 
 //iread
 //updates ip fields, if ip->flags doesn't have I_VALID, the inode will be read from disk
@@ -50,7 +48,7 @@ procfsiread(struct inode* dp, struct inode *ip) {
 	    ip->nlink = dp->nlink;
 	    ip->size = dp->size;
   }// intiate file
-  else if ((ip->inum >= 3000 && ip->inum < 4000) || // cmdline
+  else if ( //free (ip->inum >= 3000 && ip->inum < 4000)
           (ip->inum >= 6000 && ip->inum <= 7000) || // status
           (ip->inum >= 10000 && ip->inum <= 16000)){ // file descriptors
     ip->minor = FILE;
@@ -77,13 +75,9 @@ procfsiread(struct inode* dp, struct inode *ip) {
   }
 }
 
-
-
-
 // chdir > namei > namex > dirlookup > readi > device "read"
 int
 procfsread(struct inode *ip, char *dst, int off, int n) {
-	cprintf("i'm in procfsread\n");
 	// dirent array for virtual folders
 	struct dirent dirent_entries[NPROC+2]; //ref: entries
 
@@ -146,11 +140,6 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 	      dirent_entries[1].inum = namei("/proc")->inum; 
 	      memmove(output+sizeof(struct dirent), &dirent_entries[1], sizeof(struct dirent));
 	      
-	      //CMDLINE
-	      strcpy(dirent_entries[2].name,"cmdline");
-	      dirent_entries[2].inum = 2000 + ip->inum;
-	      memmove(output+(2 * sizeof(struct dirent)), &dirent_entries[2], sizeof(struct dirent));
-
 	      //CWD
 	      pid = ip->inum % 1000;
 	      struct inode* cwd = 0;
