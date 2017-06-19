@@ -31,6 +31,14 @@ struct proc getProc(int n){
   return ptable.proc[n];
 }
 
+struct proc findProc(int n){
+  return ptable.proc[n];
+}
+
+int checkProc(int n, int pid){
+  return ptable.proc[n].pid == pid;
+}
+
 
 
 

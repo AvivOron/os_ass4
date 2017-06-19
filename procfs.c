@@ -14,17 +14,46 @@
 #include "bio.h"
 
 
+
+int writeBytes(int bytes_remaining, int bytes_written, 
+	int off, int entry_count, int n, int temp_n, char * dst, char output[1024]){
+		//write remaining bytes to output
+		if (off < ((entry_count) * sizeof(struct dirent))){
+			bytes_remaining = (entry_count * sizeof(struct dirent)) - off;
+			if (bytes_remaining < n)
+				temp_n = bytes_remaining;
+			memmove(dst, output + off, temp_n);
+			bytes_written = temp_n;
+			return bytes_written;
+		}
+		return 0;
+}
+
+int writeToN(int bytes_remaining, 
+	int off, int temp_n, char * dst, char buffer[256]){
+      if (off < strlen(buffer)){
+        bytes_remaining = strlen(buffer) - off;
+        if (bytes_remaining < temp_n){
+          temp_n = bytes_remaining;
+        }
+        // Write to output buffer
+        memmove(dst, buffer + off, temp_n);
+        return temp_n;
+      }
+      return 0;
+}
+
 // if the file is not a directory return 0, else return num != 0
 int 
 procfsisdir(struct inode *ip) {
 	//make sure is a directory and is under procfs
 	if(ip->type == T_DEV  && ip->major==PROCFS){
-		//check that inum (inode number) is equal to a number in the /proc directory
+		//check if inum (inode number) is /proc directory
 		if (ip->inum == namei("/proc")->inum)
         	return 1;
-      	else
+      	else //if not check that is set to directory
         	return ip->minor == DIRECTORY;
-	}
+	}//if not check that is set to directory
     return ip->minor == DIRECTORY;
 }
 
@@ -36,43 +65,43 @@ procfsisdir(struct inode *ip) {
 void 
 procfsiread(struct inode* dp, struct inode *ip) {
 	//check if is a directory / file etc and initialize accordingly
-	//check that inum (inode number) is equal to a number in the /proc directory
-
-	//initiate directory
+	//initiate the /proc directory
     if (ip->inum == namei("/proc")->inum){
+   		ip->major = PROCFS;
     	//use minor to indicate this is a directory
 	    ip->minor = DIRECTORY;
-	    ip->major = PROCFS;
-	    ip->dev = dp->dev; //same device
-	    ip->ref = dp->ref;
 	    ip->flags = dp->flags | I_VALID; //initiate valid flag
+	    //all fields identical to parent directory
+	    ip->dev = dp->dev; //same device	
+	    ip->ref = dp->ref;	//same references
 	    ip->type = dp->type;
 	    ip->nlink = dp->nlink;
 	    ip->size = dp->size;
-  }// intiate file
-  else if ( //free (ip->inum >= 3000 && ip->inum < 4000)
-          (ip->inum >= 3000 && ip->inum <= 3001) || // proc files
-          (ip->inum >= 6000 && ip->inum <= 7000) || // status
-          (ip->inum >= 10000 && ip->inum <= 16000)){ // file descriptors
-    ip->minor = FILE;
-    ip->major = PROCFS;
-    ip->flags = ip->flags | I_VALID;
-
-    ip->dev = dp->dev;
-    ip->ref = dp->ref;
-    ip->type = T_DEV; 
-    ip->nlink = dp->nlink;
-    ip->size = dp->size;
   }//intiate device as a directory
-  else if ((ip->inum >= 1000 && ip->inum <= 2000) || // PID
-           (ip->inum >= 5000 && ip->inum <= 6000)){ // fdinfo
+  else if ((ip->inum >= 1000 && ip->inum < 2000) || // PID
+           (ip->inum >= 4000 && ip->inum <= 5000)){ // FDINFO
+  	ip->major = PROCFS;
   	//use minor to indicate this is a directory
     ip->minor = DIRECTORY;
-    ip->major = PROCFS;
     ip->flags = ip->flags | I_VALID;
+    ip->type = T_DEV; //to be a device 
+    //rest same as parent
     ip->dev = dp->dev;
     ip->ref = dp->ref;
+    ip->nlink = dp->nlink;
+    ip->size = dp->size;
+  } // intiate file
+  else if ((ip->inum >= 3000 && ip->inum <= 3001) || // FILES IN PROC - BLOCKSTAT / INODESTAT
+          (ip->inum >= 2000 && ip->inum < 3000) || // STATUS
+          (ip->inum >= 10000 && ip->inum <= 16000)){ // FDs
+   	//use minor to indicate this is a directory
+    ip->major = PROCFS;
+    ip->minor = FILE;
+    ip->flags = ip->flags | I_VALID;
     ip->type = T_DEV; 
+    //rest same as parent
+    ip->dev = dp->dev;
+    ip->ref = dp->ref;
     ip->nlink = dp->nlink;
     ip->size = dp->size;
   }
@@ -81,63 +110,47 @@ procfsiread(struct inode* dp, struct inode *ip) {
 // chdir > namei > namex > dirlookup > readi > device "read"
 int
 procfsread(struct inode *ip, char *dst, int off, int n) {
-	// dirent array for virtual folders
-	struct dirent dirent_entries[NPROC+4]; //ref: entries
-
-	// create dir array
-	struct proc p;
-	char output[1024]; //ref: out
-
-	int entry_count = 4; //ref: ent_count
-	int bytes_written = 0; //ref: written_bytes
-	int bytes_remaining = 0; //ref: remaining
-	int temp_n = n; //ref: actual_n
-
+	int entry_count = 4;
+	int bytes_written = 0; 
+	int bytes_remaining = 0; 
+	int temp_n = n; 
 	int i, pid;
+	// dirent array for virtual folders
+	struct dirent dirent_entries[NPROC+4]; 
+	struct proc p;
+	//buffer
+	char output[1024];
 
 	//intiate PROC
-	//check that inum (inode number) is equal to a number in the /proc directory
+	//check that inum (inode number) is equal the /proc directory
 	if (ip->inum == namei("/proc")->inum){
 		//proc intiation
 		strcpy(dirent_entries[0].name, "."); 
 		dirent_entries[0].inum = namei("/proc")->inum; 
 		memmove(output, &dirent_entries[0], sizeof(struct dirent));
-
 		strcpy(dirent_entries[1].name,".."); 
 		dirent_entries[1].inum = 1; 
 		memmove(output+sizeof(struct dirent), &dirent_entries[1], sizeof(struct dirent));
-
-    strcpy(dirent_entries[2].name,"blockstat"); 
-    dirent_entries[2].inum = 3000; 
-    memmove(output+(2 * sizeof(struct dirent)), &dirent_entries[2], sizeof(struct dirent));
-
-    strcpy(dirent_entries[3].name,"inodestat"); 
-    dirent_entries[3].inum = 3001; 
-    memmove(output+(3 * sizeof(struct dirent)), &dirent_entries[3], sizeof(struct dirent));
+    	strcpy(dirent_entries[2].name,"blockstat"); 
+    	dirent_entries[2].inum = 3000; 
+    	memmove(output+(2 * sizeof(struct dirent)), &dirent_entries[2], sizeof(struct dirent));
+	    strcpy(dirent_entries[3].name,"inodestat"); 
+    	dirent_entries[3].inum = 3001; 
+    	memmove(output+(3 * sizeof(struct dirent)), &dirent_entries[3], sizeof(struct dirent));
 
 		//for each process running, create a directory (this is done in runtime)
 		for(i = 0; i < NPROC; i++){
-			p = getProc(i);
+			p = findProc(i);
 			//if process is alive
 			if ((p.state != ZOMBIE) && (p.state != UNUSED)){
-				itoa(p.pid, dirent_entries[entry_count].name);
+				numToCHar(p.pid, dirent_entries[entry_count].name);
 				//start PIDs from 1000
 				dirent_entries[entry_count].inum = p.pid + 1000;
 				memmove(output+(entry_count * sizeof(struct dirent)), &dirent_entries[entry_count], sizeof(struct dirent));
 				entry_count++;
 			}
 		}
-
-		//write remaining bytes to output
-		if (off < ((entry_count) * sizeof(struct dirent))){
-			bytes_remaining = (entry_count * sizeof(struct dirent)) - off;
-			if (bytes_remaining < n)
-				temp_n = bytes_remaining;
-
-			memmove(dst, output + off, temp_n);
-			bytes_written = temp_n;
-			return bytes_written;
-		}
+		return writeBytes(bytes_remaining, bytes_written, off, entry_count, n, temp_n, dst, output);
 	}
 	//initiate processes
 	else if ((ip->type == T_DEV) && (ip->major == PROCFS)){
@@ -148,76 +161,56 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       strcpy(blockstat_buff, "");
       strcpy(blockstat_buff,"Free blocks: ");
       char numOfFreeBlocksStr[10] = "";
-      itoa(getFreeBlocks(), numOfFreeBlocksStr);
+      numToCHar(getFreeBlocks(), numOfFreeBlocksStr);
       strcpy(blockstat_buff+strlen(blockstat_buff),numOfFreeBlocksStr);
       strcpy(blockstat_buff+strlen(blockstat_buff),"\n");
 
       strcpy(blockstat_buff+strlen(blockstat_buff),"Total blocks: ");
       char numOfTotalBlocksStr[10] = "";
-      itoa(getTotalBlocks(), numOfTotalBlocksStr);
+      numToCHar(getTotalBlocks(), numOfTotalBlocksStr);
       strcpy(blockstat_buff+strlen(blockstat_buff),numOfTotalBlocksStr);
       strcpy(blockstat_buff+strlen(blockstat_buff),"\n");
 
       strcpy(blockstat_buff+strlen(blockstat_buff),"Hit ratio: ");
       char hitRatio[10] = "";
-      itoa(getNumOfBlockHits(), hitRatio);
+      numToCHar(getNumOfBlockHits(), hitRatio);
       strcpy(blockstat_buff+strlen(blockstat_buff),hitRatio);
       strcpy(blockstat_buff+strlen(blockstat_buff),"\\");
-      itoa(getNumOfBlockAccess(), hitRatio);
+      numToCHar(getNumOfBlockAccess(), hitRatio);
       strcpy(blockstat_buff+strlen(blockstat_buff),hitRatio);
 
       strcpy(blockstat_buff+strlen(blockstat_buff),"\n");
 
-        // Write to dst
-      if (off < strlen(blockstat_buff)){
-        bytes_remaining = strlen(blockstat_buff) - off;
-        //cprintf("*actual_n==%d\n", actual_n);
 
-        if (bytes_remaining < temp_n){
-          temp_n = bytes_remaining;
-        }
-        // Write to output buffer
-        memmove(dst, blockstat_buff + off, temp_n);
+      return writeToN(bytes_remaining, off, temp_n, dst, blockstat_buff);
 
-        return temp_n;
-      }
     }
     else if(ip->inum == 3001){
       char inodestat_buff[256];
       strcpy(inodestat_buff, "");
       strcpy(inodestat_buff,"Free inodes: ");
       char buf[10] = "";
-      itoa(getFreeInodes(), buf);
+      numToCHar(getFreeInodes(), buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),"\n");
 
       strcpy(inodestat_buff+strlen(inodestat_buff),"Valid inodes: ");
-      itoa(getValidInodes(), buf);
+      numToCHar(getValidInodes(), buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),"\n");
 
       strcpy(inodestat_buff+strlen(inodestat_buff),"Refs per inode: ");
-      itoa(getTotalRefs(), buf);
+      numToCHar(getTotalRefs(), buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),"\\");
-      itoa(getUsedInodes(), buf);
+      numToCHar(getUsedInodes(), buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),buf);
       strcpy(inodestat_buff+strlen(inodestat_buff),"\n");
 
 
       // Write to dst
-      if (off < strlen(inodestat_buff)){
-        bytes_remaining = strlen(inodestat_buff) - off;
-        //cprintf("*actual_n==%d\n", actual_n);
+      return writeToN(bytes_remaining, off, temp_n, dst, inodestat_buff);
 
-        if (bytes_remaining < temp_n){
-          temp_n = bytes_remaining;
-        }
-        // Write to output buffer
-        memmove(dst, inodestat_buff + off, temp_n);
-
-        return temp_n;
-      }
 
     }
     else if (ip->inum >= 1000 && ip->inum < 2000){ //PID
@@ -233,8 +226,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 	      pid = ip->inum % 1000;
 	      struct inode* cwd = 0;
 	      for(i = 0; i < NPROC; i++){
-	        p = getProc(i);
-
+	        p = findProc(i);
 	        if (p.pid == pid){
 	          cwd = p.cwd;
 	          break;
@@ -246,51 +238,83 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 	      	return 0;
 
 	      //FOUND PROCESS
+	      //CWD
 	      strcpy(dirent_entries[2].name,"cwd");
-
 	      if (cwd)
 	        dirent_entries[2].inum = cwd->inum;
 	      else 
-	        dirent_entries[2].inum = 3000 + ip->inum;
-	      
+	        dirent_entries[2].inum = 4000 + ip->inum;
 	      memmove(output+(2 * sizeof(struct dirent)), &dirent_entries[2], sizeof(struct dirent));
-
 	      //FDINFO
 	      strcpy(dirent_entries[3].name,"fdinfo");
-	      dirent_entries[3].inum = 4000 + ip->inum;
+	      dirent_entries[3].inum = 3000 + ip->inum;
 	      memmove(output+(3 * sizeof(struct dirent)), &dirent_entries[3], sizeof(struct dirent));
-
 	      //STATUS
 	      strcpy(dirent_entries[4].name,"status");
-	      dirent_entries[4].inum = 5000 + ip->inum;
+	      dirent_entries[4].inum = 1000 + ip->inum;
 	      memmove(output+(4 * sizeof(struct dirent)), &dirent_entries[4], sizeof(struct dirent));
 
 	      //write content to dst
-	      if (off < ((5) * sizeof(struct dirent))){
-	        bytes_remaining = (5 * sizeof(struct dirent)) - off;
-	        //cprintf("*actual_n==%d\n", actual_n);
+	      return writeBytes(bytes_remaining, bytes_written, off, 5, n, temp_n, dst, output);
 
-	        if (bytes_remaining < n){
-	          temp_n = bytes_remaining;
-	        }
 
-	        // Write to output buffer
-	        memmove(dst, output + off, temp_n);
+	    }  //STATUS
+    	else if (ip->inum >= 2000 && ip->inum < 3000){
+    		char status_buffer[256];
+    		int pid = ip->inum % 1000;
+		    for(i = 0; i < NPROC; i++){
+		    	p = findProc(i);
+		        if (p.pid == pid)
+		          break;
+		    }
 
-	        bytes_written = temp_n;
+	  //NO PID
+      if (i == NPROC)
+      	return 0;
 
-	        return bytes_written;
-	      }
-	    }
+      //PID FOUND
+      strcpy(status_buffer, "");
+      strcpy(status_buffer, "Run State: ");
+      switch (p.state){
+       case RUNNABLE:
+          strcpy(status_buffer+strlen(status_buffer), "RUNNABLE");
+          break;
+      case RUNNING:
+          strcpy(status_buffer+strlen(status_buffer), "RUNNING");
+          break;  
+        case SLEEPING:
+          strcpy(status_buffer+strlen(status_buffer), "SLEEPING");
+          break;      
+      case UNUSED:
+            strcpy(status_buffer+strlen(status_buffer), "UNUSED");
+            break;
+        case EMBRYO:
+          strcpy(status_buffer+strlen(status_buffer), "EMBRYO");
+          break;  
+       case ZOMBIE:
+          strcpy(status_buffer+strlen(status_buffer), "ZOMBIE");
+          break;
+        default:
+          strcpy(status_buffer+strlen(status_buffer), "no state - default config");
+          break;
+      }
+      strcpy(status_buffer+strlen(status_buffer), ", Memory Usage: ");
+      numToCHar(p.sz, status_buffer+strlen(status_buffer));
+      strcpy(status_buffer+strlen(status_buffer), "\n");
+      temp_n = n;
+      // Write to dst
+      return writeToN(bytes_remaining, off, temp_n, dst, status_buffer);
+
+    }
 	//FDINFO
-    else if (ip->inum >= 5000 && ip->inum < 6000){
-      char fdinfo_buff[1024]; //ref: dfinfo_buffer
+    else if (ip->inum >= 4000 && ip->inum < 5000){
+      char fdinfo_buff[1024]; 
       int pid = ip->inum % 1000;
-      int fd_written = 0; //written_fds
-      struct dirent fd_direntry; //fd_dirent
+      int fd_written = 0; 
+      struct dirent fd_direntry; 
 
       for(i = 0; i < NPROC; i++){
-        p = getProc(i);
+        p = findProc(i);
         if (p.pid == pid)
           break;
       }
@@ -315,7 +339,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       for (i = 0; i < NOFILE; i++){
         if (fsd[i]->ref > 0){
           //write to buffer
-          itoa(i, fd_direntry.name);
+          numToCHar(i, fd_direntry.name);
           fd_direntry.inum = pid + ((i + 10) * 1000);
           memmove(fdinfo_buff+(sizeof(struct dirent)*fd_written), (char*)&fd_direntry, sizeof(struct dirent));
           fd_written++;
@@ -323,85 +347,23 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       }
       temp_n = n;
 
-      // Write to dst
+      // Write to dst - special function for fdinfo - since size is critical by fd_written
       if (off <  fd_written * sizeof(struct dirent)){
         bytes_remaining =  fd_written * sizeof(struct dirent) - off;
         if (bytes_remaining < temp_n)
           temp_n = bytes_remaining;
-
         memmove(dst, fdinfo_buff + off, temp_n);
-
         return temp_n;
       }
     }
-    //STATUS //ref: didn't change yet
-    else if (ip->inum >= 6000 && ip->inum < 7000){
-      char status_buff[256];
-      int pid = ip->inum % 1000;
-      for(i = 0; i < NPROC; i++){
-        p = getProc(i);
-        if (p.pid == pid)
-          break;
-      }
-
-	  //NO PID
-      if (i == NPROC)
-      	return 0;
-
-      //PID FOUND
-      strcpy(status_buff, "");
-      strcpy(status_buff, "Process run state:: ");
-      switch (p.state){
-        case UNUSED:
-            strcpy(status_buff+strlen(status_buff), "UNUSED");
-            break;
-        case EMBRYO:
-          strcpy(status_buff+strlen(status_buff), "EMBRYO");
-          break;        
-        case SLEEPING:
-          strcpy(status_buff+strlen(status_buff), "SLEEPING");
-          break;
-       case RUNNABLE:
-          strcpy(status_buff+strlen(status_buff), "RUNNABLE");
-          break;
-      case RUNNING:
-          strcpy(status_buff+strlen(status_buff), "RUNNING");
-          break;
-       case ZOMBIE:
-          strcpy(status_buff+strlen(status_buff), "ZOMBIE");
-          break;
-        default:
-          strcpy(status_buff+strlen(status_buff), "default");
-          break;
-      }
-      
-      strcpy(status_buff+strlen(status_buff), ", Memory usage:: ");
-      itoa(p.sz, status_buff+strlen(status_buff));
-      strcpy(status_buff+strlen(status_buff), "\n");
-      temp_n = n;
-
-      // Write to dst
-      if (off < strlen(status_buff)){
-        bytes_remaining = strlen(status_buff) - off;
-        //cprintf("*actual_n==%d\n", actual_n);
-
-        if (bytes_remaining < temp_n){
-          temp_n = bytes_remaining;
-        }
-        // Write to output buffer
-        memmove(dst, status_buff + off, temp_n);
-
-        return temp_n;
-      }
-    }
-    //FDINFO file descriptor //ref: didn't change internal params
+    //FDINFO file descriptor 
     else if (ip->inum >= 10000 && ip->inum < 16000){
       int fd = ((int)ip->inum/1000)-10;
-      char fd_buff[256];
+      char fd_buffer[256];
       int pid = ip->inum % 1000;
 
       for(i = 0; i < NPROC; i++){
-        p = getProc(i);
+        p = findProc(i);
         if (p.pid == pid)
           break;
       }
@@ -410,52 +372,45 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       if (i == NPROC)
       	return 0;
 
-      //PID FOUND //ref: aviv: fdinfo texts already changed
-      strcpy(fd_buff, "FD: ");
-      itoa(fd, fd_buff+strlen(fd_buff));
-      strcpy(fd_buff+strlen(fd_buff), " REF: ");
-      itoa(p.ofile[fd]->ref, fd_buff+strlen(fd_buff));
-      strcpy(fd_buff+strlen(fd_buff), " INODE_NUM: ");
-      itoa(p.ofile[fd]->ip->inum, fd_buff+strlen(fd_buff));
-      strcpy(fd_buff+strlen(fd_buff), " TYPE: ");
+      //PID FOUND 
+      strcpy(fd_buffer, "FD: ");
+      numToCHar(fd, fd_buffer+strlen(fd_buffer));
+      strcpy(fd_buffer+strlen(fd_buffer), " REF: ");
+      numToCHar(p.ofile[fd]->ref, fd_buffer+strlen(fd_buffer));
+      strcpy(fd_buffer+strlen(fd_buffer), " INODE_NUM: ");
+      numToCHar(p.ofile[fd]->ip->inum, fd_buffer+strlen(fd_buffer));
+      strcpy(fd_buffer+strlen(fd_buffer), " TYPE: ");
       switch(p.ofile[fd]->type){
         case (FD_NONE):
-          strcpy(fd_buff+strlen(fd_buff), "FD_NONE");
+          strcpy(fd_buffer+strlen(fd_buffer), "FD_NONE");
           break;
        case (FD_PIPE):
-        strcpy(fd_buff+strlen(fd_buff), "FD_PIPE");
+        strcpy(fd_buffer+strlen(fd_buffer), "FD_PIPE");
         break;
        case (FD_INODE):
-        strcpy(fd_buff+strlen(fd_buff), "FD_INODE");
+        strcpy(fd_buffer+strlen(fd_buffer), "FD_INODE");
         break;
        default:
-        strcpy(fd_buff+strlen(fd_buff), "DEFAULT");
+        strcpy(fd_buffer+strlen(fd_buffer), "DEFAULT");
         break;
       }
-      strcpy(fd_buff+strlen(fd_buff), " POSITION: ");
-      itoa(p.ofile[fd]->off, fd_buff+strlen(fd_buff));
+      strcpy(fd_buffer+strlen(fd_buffer), " POSITION: ");
+      numToCHar(p.ofile[fd]->off, fd_buffer+strlen(fd_buffer));
 
-      strcpy(fd_buff+strlen(fd_buff), " FLAGS: ");
+      strcpy(fd_buffer+strlen(fd_buffer), " FLAGS: ");
       if(p.ofile[fd]->readable){
-        strcpy(fd_buff+strlen(fd_buff), "R"); 
+        strcpy(fd_buffer+strlen(fd_buffer), "R"); 
       }
       if(p.ofile[fd]->writable){
-        strcpy(fd_buff+strlen(fd_buff), "W "); 
+        strcpy(fd_buffer+strlen(fd_buffer), "W "); 
       }
 
       temp_n = n;
 
       //Write to dst
-      if (off < strlen(fd_buff)){
-        bytes_remaining = strlen(fd_buff) - off;
-        if (bytes_remaining < temp_n)
-          temp_n = bytes_remaining;
-        
-        // Write to output buffer
-        memmove(dst, fd_buff + off, temp_n);
-        return temp_n;
-      }
-    }
+		return writeToN(bytes_remaining, off, temp_n, dst, fd_buffer);
+      
+    	}
     }	
 	return 0;
 }

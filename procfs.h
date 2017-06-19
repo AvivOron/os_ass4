@@ -12,23 +12,27 @@ strcpy(char *s, char *t)
   return os;
 }
 
-//ref:
-char* itoa(int i, char b[]){
-    char const digit[] = "0123456789";
-    char* p = b;
-    if(i<0){
-        *p++ = '-';
-        i *= -1;
+char* numToCHar(int num, char returnBuff[]){
+    char* buff = returnBuff;
+    char const numbers[] = "0123456789";
+    int numsLeft;
+    if(num < 0){
+        *buff++ = '-';
+        num *= -1;
     }
-    int shifter = i;
-    do{ 
-    	++p;
-        shifter = shifter/10;
-    }while(shifter);
-    *p = '\0';
-    do{ 
-        *--p = digit[i%10];
-        i = i/10;
-    }while(i);
-    return b;
+    numsLeft = num;
+    ++buff;
+    numsLeft = numsLeft/10;
+    while(numsLeft){
+        ++buff;
+        numsLeft = numsLeft/10;        
+    }
+    *buff = '\0';
+    *--buff = numbers[num%10];
+    num = num/10;
+    while(num){
+        *--buff = numbers[num%10];
+        num = num/10;        
+    }
+    return returnBuff;
 }
