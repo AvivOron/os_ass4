@@ -23,6 +23,7 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 static void itrunc(struct inode*);
 
+
 // Read the super block.
 void
 readsb(int dev, struct superblock *sb)

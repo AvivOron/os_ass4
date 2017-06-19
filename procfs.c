@@ -410,33 +410,38 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       if (i == NPROC)
       	return 0;
 
-      //PID FOUND
-      strcpy(fd_buff, "TYPE = ");
+      //PID FOUND //ref: aviv: fdinfo texts already changed
+      strcpy(fd_buff, "FD: ");
+      itoa(fd, fd_buff+strlen(fd_buff));
+      strcpy(fd_buff+strlen(fd_buff), " REF: ");
+      itoa(p.ofile[fd]->ref, fd_buff+strlen(fd_buff));
+      strcpy(fd_buff+strlen(fd_buff), " INODE_NUM: ");
+      itoa(p.ofile[fd]->ip->inum, fd_buff+strlen(fd_buff));
+      strcpy(fd_buff+strlen(fd_buff), " TYPE: ");
       switch(p.ofile[fd]->type){
         case (FD_NONE):
-                strcpy(fd_buff+strlen(fd_buff), "FD_NONE");
-                break;
+          strcpy(fd_buff+strlen(fd_buff), "FD_NONE");
+          break;
        case (FD_PIPE):
-                strcpy(fd_buff+strlen(fd_buff), "FD_PIPE");
-                break;
+        strcpy(fd_buff+strlen(fd_buff), "FD_PIPE");
+        break;
        case (FD_INODE):
-                strcpy(fd_buff+strlen(fd_buff), "FD_INODE");
-                break;
+        strcpy(fd_buff+strlen(fd_buff), "FD_INODE");
+        break;
        default:
-                strcpy(fd_buff+strlen(fd_buff), "DEFAULT");
-                break;
+        strcpy(fd_buff+strlen(fd_buff), "DEFAULT");
+        break;
       }
-      strcpy(fd_buff+strlen(fd_buff), "; OFFSET = ");
+      strcpy(fd_buff+strlen(fd_buff), " POSITION: ");
       itoa(p.ofile[fd]->off, fd_buff+strlen(fd_buff));
 
-      strcpy(fd_buff+strlen(fd_buff), "; WRITABLE = ");
-      itoa(p.ofile[fd]->writable, fd_buff+strlen(fd_buff));
-
-      strcpy(fd_buff+strlen(fd_buff), "; READABLE = ");
-      itoa(p.ofile[fd]->readable, fd_buff+strlen(fd_buff));
-
-      strcpy(fd_buff+strlen(fd_buff), ";\n"); 
-
+      strcpy(fd_buff+strlen(fd_buff), " FLAGS: ");
+      if(p.ofile[fd]->readable){
+        strcpy(fd_buff+strlen(fd_buff), "R"); 
+      }
+      if(p.ofile[fd]->writable){
+        strcpy(fd_buff+strlen(fd_buff), "W "); 
+      }
 
       temp_n = n;
 

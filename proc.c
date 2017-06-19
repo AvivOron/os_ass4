@@ -7,7 +7,7 @@
 #include "proc.h"
 #include "spinlock.h"
 
-struct {
+struct  ptable{
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
@@ -30,6 +30,8 @@ pinit(void)
 struct proc getProc(int n){
   return ptable.proc[n];
 }
+
+
 
 
 //PAGEBREAK: 32
