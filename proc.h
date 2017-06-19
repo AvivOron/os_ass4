@@ -19,7 +19,6 @@ struct cpu {
 extern struct cpu cpus[NCPU];
 extern int ncpu;
 
-struct proc getProc(int n);
 struct proc findProc(int n);
 int checkProc(int n, int pid);
 

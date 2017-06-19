@@ -27,10 +27,6 @@ pinit(void)
 }
 
 
-struct proc getProc(int n){
-  return ptable.proc[n];
-}
-
 struct proc findProc(int n){
   return ptable.proc[n];
 }
