@@ -47,16 +47,14 @@ int writeToN(int bytes_remaining,
 int 
 procfsisdir(struct inode *ip) {
 	//make sure is a directory and is under procfs
-	if(ip->type == T_DEV  && ip->major==PROCFS){
-		//check if inum (inode number) is /proc directory
-		if (ip->inum == namei("/proc")->inum)
-        	return 1;
-      	else //if not check that is set to directory
-        	return ip->minor == DIRECTORY;
-	}//if not check that is set to directory
+	if(ip->type == T_DEV  && ip->major==PROCFS 
+    && ip->inum == namei("/proc")->inum){
+  		return 1;
+  }
+  else{
     return ip->minor == DIRECTORY;
+  }
 }
-
 
 //iread
 //updates ip fields, if ip->flags doesn't have I_VALID, the inode will be read from disk
@@ -67,59 +65,70 @@ procfsiread(struct inode* dp, struct inode *ip) {
 	//check if is a directory / file etc and initialize accordingly
 	//initiate the /proc directory
     if (ip->inum == namei("/proc")->inum){
+      //all fields identical to parent directory
+      ip->ref = dp->ref;  //same references
+      ip->size = dp->size;
+      ip->type = dp->type;
+      ip->nlink = dp->nlink;
+      ip->dev = dp->dev; //same device  
+
    		ip->major = PROCFS;
     	//use minor to indicate this is a directory
 	    ip->minor = DIRECTORY;
 	    ip->flags = dp->flags | I_VALID; //initiate valid flag
-	    //all fields identical to parent directory
-	    ip->dev = dp->dev; //same device	
-	    ip->ref = dp->ref;	//same references
-	    ip->type = dp->type;
-	    ip->nlink = dp->nlink;
-	    ip->size = dp->size;
-  }//intiate device as a directory
-  else if ((ip->inum >= 1000 && ip->inum < 2000) || // PID
-           (ip->inum >= 4000 && ip->inum <= 5000)){ // FDINFO
-  	ip->major = PROCFS;
-  	//use minor to indicate this is a directory
-    ip->minor = DIRECTORY;
-    ip->flags = ip->flags | I_VALID;
-    ip->type = T_DEV; //to be a device 
-    //rest same as parent
+
+      return;
+  } 
+
+  // intiate file
+  if ((ip->inum >= 3000 && ip->inum <= 3001) || //range of FILES IN PROC - BLOCKSTAT / INODESTAT
+          (ip->inum >= 2000 && ip->inum < 3000) || // range of STATUS
+          (ip->inum >= 10000 && ip->inum <= 16000)){ // range of FDs
+    //same as parent
     ip->dev = dp->dev;
     ip->ref = dp->ref;
-    ip->nlink = dp->nlink;
     ip->size = dp->size;
-  } // intiate file
-  else if ((ip->inum >= 3000 && ip->inum <= 3001) || // FILES IN PROC - BLOCKSTAT / INODESTAT
-          (ip->inum >= 2000 && ip->inum < 3000) || // STATUS
-          (ip->inum >= 10000 && ip->inum <= 16000)){ // FDs
-   	//use minor to indicate this is a directory
+    ip->nlink = dp->nlink;
+
+    //use minor to indicate this is a directory
     ip->major = PROCFS;
     ip->minor = FILE;
     ip->flags = ip->flags | I_VALID;
     ip->type = T_DEV; 
-    //rest same as parent
+
+    return;
+  } 
+
+  //intiate device as a directory
+  if ((ip->inum >= 1000 && ip->inum < 2000) || // range of PID
+           (ip->inum >= 4000 && ip->inum <= 5000)){ // range of FDINFO
+    //same as parent
     ip->dev = dp->dev;
     ip->ref = dp->ref;
-    ip->nlink = dp->nlink;
     ip->size = dp->size;
-  }
+    ip->nlink = dp->nlink;
+
+    //use minor to indicate this is a directory
+    ip->major = PROCFS;
+    ip->minor = DIRECTORY;
+    ip->flags = ip->flags | I_VALID;
+    ip->type = T_DEV; //to be a device 
+  } 
 }
 
 // chdir > namei > namex > dirlookup > readi > device "read"
 int
 procfsread(struct inode *ip, char *dst, int off, int n) {
-	int entry_count = 4;
-	int bytes_written = 0; 
-	int bytes_remaining = 0; 
-	int temp_n = n; 
+	int num_of_default_dirents = 4;
+	int wCount = 0; 
+	int remCount = 0; 
+	int tempCount = n; 
 	int i, pid;
 	// dirent array for virtual folders
 	struct dirent dirent_entries[NPROC+4]; 
 	struct proc p;
 	//buffer
-	char output[1024];
+	char output[1000];
 
 	//intiate PROC
 	//check that inum (inode number) is equal the /proc directory
@@ -143,14 +152,14 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 			p = findProc(i);
 			//if process is alive
 			if ((p.state != ZOMBIE) && (p.state != UNUSED)){
-				numToCHar(p.pid, dirent_entries[entry_count].name);
+				numToCHar(p.pid, dirent_entries[num_of_default_dirents].name);
 				//start PIDs from 1000
-				dirent_entries[entry_count].inum = p.pid + 1000;
-				memmove(output+(entry_count * sizeof(struct dirent)), &dirent_entries[entry_count], sizeof(struct dirent));
-				entry_count++;
+				dirent_entries[num_of_default_dirents].inum = p.pid + 1000;
+				memmove(output+(num_of_default_dirents * sizeof(struct dirent)), &dirent_entries[num_of_default_dirents], sizeof(struct dirent));
+				num_of_default_dirents++;
 			}
 		}
-		return writeBytes(bytes_remaining, bytes_written, off, entry_count, n, temp_n, dst, output);
+		return writeBytes(remCount, wCount, off, num_of_default_dirents, n, tempCount, dst, output);
 	}
 	//initiate processes
 	else if ((ip->type == T_DEV) && (ip->major == PROCFS)){
@@ -182,7 +191,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       strcpy(blockstat_buff+strlen(blockstat_buff),"\n");
 
 
-      return writeToN(bytes_remaining, off, temp_n, dst, blockstat_buff);
+      return writeToN(remCount, off, tempCount, dst, blockstat_buff);
 
     }
     else if(ip->inum == 3001){
@@ -209,7 +218,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 
 
       // Write to dst
-      return writeToN(bytes_remaining, off, temp_n, dst, inodestat_buff);
+      return writeToN(remCount, off, tempCount, dst, inodestat_buff);
 
 
     }
@@ -255,7 +264,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 	      memmove(output+(4 * sizeof(struct dirent)), &dirent_entries[4], sizeof(struct dirent));
 
 	      //write content to dst
-	      return writeBytes(bytes_remaining, bytes_written, off, 5, n, temp_n, dst, output);
+	      return writeBytes(remCount, wCount, off, 5, n, tempCount, dst, output);
 
 
 	    }  //STATUS
@@ -295,15 +304,15 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
           strcpy(status_buffer+strlen(status_buffer), "ZOMBIE");
           break;
         default:
-          strcpy(status_buffer+strlen(status_buffer), "no state - default config");
+          strcpy(status_buffer+strlen(status_buffer), "NULL");
           break;
       }
       strcpy(status_buffer+strlen(status_buffer), ", Memory Usage: ");
       numToCHar(p.sz, status_buffer+strlen(status_buffer));
       strcpy(status_buffer+strlen(status_buffer), "\n");
-      temp_n = n;
+      tempCount = n;
       // Write to dst
-      return writeToN(bytes_remaining, off, temp_n, dst, status_buffer);
+      return writeToN(remCount, off, tempCount, dst, status_buffer);
 
     }
 	//FDINFO
@@ -345,15 +354,15 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
           fd_written++;
         }
       }
-      temp_n = n;
+      tempCount = n;
 
       // Write to dst - special function for fdinfo - since size is critical by fd_written
       if (off <  fd_written * sizeof(struct dirent)){
-        bytes_remaining =  fd_written * sizeof(struct dirent) - off;
-        if (bytes_remaining < temp_n)
-          temp_n = bytes_remaining;
-        memmove(dst, fdinfo_buff + off, temp_n);
-        return temp_n;
+        remCount =  fd_written * sizeof(struct dirent) - off;
+        if (remCount < tempCount)
+          tempCount = remCount;
+        memmove(dst, fdinfo_buff + off, tempCount);
+        return tempCount;
       }
     }
     //FDINFO file descriptor 
@@ -405,10 +414,10 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
         strcpy(fd_buffer+strlen(fd_buffer), "W "); 
       }
 
-      temp_n = n;
+      tempCount = n;
 
       //Write to dst
-		return writeToN(bytes_remaining, off, temp_n, dst, fd_buffer);
+		return writeToN(remCount, off, tempCount, dst, fd_buffer);
       
     	}
     }	
