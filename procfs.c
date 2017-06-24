@@ -83,7 +83,7 @@ procfsiread(struct inode* dp, struct inode *ip) {
   // intiate file
   if ((ip->inum >= 3000 && ip->inum <= 3001) || //range of FILES IN PROC - BLOCKSTAT / INODESTAT
           (ip->inum >= 2000 && ip->inum < 3000) || // range of STATUS
-          (ip->inum >= 10000 && ip->inum <= 16000)){ // range of FDs
+          (ip->inum >= 10000 && ip->inum <= 20000)){ // range of FDs
     //same as parent
     ip->dev = dp->dev;
     ip->ref = dp->ref;
@@ -269,7 +269,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 
 	    }  //STATUS
     	else if (ip->inum >= 2000 && ip->inum < 3000){
-    		char status_buffer[256];
+    		char buffer[150];
     		int pid = ip->inum % 1000;
 		    for(i = 0; i < NPROC; i++){
 		    	p = findProc(i);
@@ -282,37 +282,37 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       	return 0;
 
       //PID FOUND
-      strcpy(status_buffer, "");
-      strcpy(status_buffer, "Run State: ");
+      strcpy(buffer, "");
+      strcpy(buffer, "Run State: ");
       switch (p.state){
        case RUNNABLE:
-          strcpy(status_buffer+strlen(status_buffer), "RUNNABLE");
+          strcpy(buffer+strlen(buffer), "RUNNABLE");
           break;
       case RUNNING:
-          strcpy(status_buffer+strlen(status_buffer), "RUNNING");
+          strcpy(buffer+strlen(buffer), "RUNNING");
           break;  
         case SLEEPING:
-          strcpy(status_buffer+strlen(status_buffer), "SLEEPING");
+          strcpy(buffer+strlen(buffer), "SLEEPING");
           break;      
       case UNUSED:
-            strcpy(status_buffer+strlen(status_buffer), "UNUSED");
+            strcpy(buffer+strlen(buffer), "UNUSED");
             break;
         case EMBRYO:
-          strcpy(status_buffer+strlen(status_buffer), "EMBRYO");
+          strcpy(buffer+strlen(buffer), "EMBRYO");
           break;  
        case ZOMBIE:
-          strcpy(status_buffer+strlen(status_buffer), "ZOMBIE");
+          strcpy(buffer+strlen(buffer), "ZOMBIE");
           break;
         default:
-          strcpy(status_buffer+strlen(status_buffer), "NULL");
+          strcpy(buffer+strlen(buffer), "NULL");
           break;
       }
-      strcpy(status_buffer+strlen(status_buffer), ", Memory Usage: ");
-      numToCHar(p.sz, status_buffer+strlen(status_buffer));
-      strcpy(status_buffer+strlen(status_buffer), "\n");
+      strcpy(buffer+strlen(buffer), ", Memory Usage: ");
+      numToCHar(p.sz, buffer+strlen(buffer));
+      strcpy(buffer+strlen(buffer), "\n");
       tempCount = n;
       // Write to dst
-      return writeToN(remCount, off, tempCount, dst, status_buffer);
+      return writeToN(remCount, off, tempCount, dst, buffer);
 
     }
 	//FDINFO
@@ -366,7 +366,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
       }
     }
     //FDINFO file descriptor 
-    else if (ip->inum >= 10000 && ip->inum < 16000){
+    else if (ip->inum >= 10000 && ip->inum < 20000){
       int fd = ((int)ip->inum/1000)-10;
       char fd_buffer[256];
       int pid = ip->inum % 1000;
@@ -427,7 +427,7 @@ procfsread(struct inode *ip, char *dst, int off, int n) {
 int
 procfswrite(struct inode *ip, char *buf, int n)
 {
-  cprintf("procfs is a read-only file system - canno't write to inum=%d*\n", ip->inum);
+  cprintf("procfs is a read-only file system - canno't write to inode %d*\n", ip->inum);
   return 0;
 }
 
